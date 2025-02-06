@@ -14,7 +14,7 @@ import "./Buy.css";
 
 export default function BuyGMXGLP() {
   const { chainId } = useChainId();
-  const to = 1736229465;
+  const to = 1738736277;
   const from = to - 60 * 60 * 24 * 7;
   const data = useTradeActions({
     chainId,
