@@ -4,85 +4,18 @@ import { useMarketsInfoData } from "context/SyntheticsStateContext/hooks/globals
 import { formatAmount } from "lib/numbers";
 import { getByKey } from "lib/objects";
 import { buildFiltersBody, getSyntheticsGraphClient } from "lib/subgraph";
-import { useCallback } from "react";
-import useSWR from "swr";
+import { useCallback, useState } from "react";
 import { getAddress } from "viem";
 import { getOrderTypeLabel } from "./synthetics/orders/utils";
 import { parseContractPrice } from "./synthetics/tokens";
 import { RawTradeAction } from "./synthetics/tradeHistory";
 
-const useTradeActions = ({
-  chainId,
-  fromTxTimestamp,
-  toTxTimestamp,
-}: {
-  chainId: number;
-  fromTxTimestamp: number;
-  toTxTimestamp: number;
-}) => {
+const useTradeActions = () => {
   const marketsInfo = useMarketsInfoData();
 
-  const filtersStr = buildFiltersBody({
-    // and: [
-    // {
-    // account: forAllAccounts ? undefined : account!.toLowerCase(),
-    transaction: {
-      timestamp_gte: fromTxTimestamp,
-      timestamp_lte: toTxTimestamp,
-    },
-    // },
-    // {
-    //   or: !hasPureDirectionFilters
-    //     ? undefined
-    //     : pureDirectionFilters.map((filter) =>
-    //         filter.direction === "swap"
-    //           ? {
-    //               orderType_in: [OrderType.LimitSwap, OrderType.MarketSwap],
-    //             }
-    //           : {
-    //               isLong: filter.direction === "long",
-    //               orderType_not_in: [OrderType.LimitSwap, OrderType.MarketSwap],
-    //             }
-    //       ),
-    // },
-    // {
-    //   or: orderEventCombinations?.map((combination) => {
-    //     let sizeDeltaUsdCondition = {};
-
-    //     if (
-    //       combination.orderType !== undefined &&
-    //       [OrderType.MarketDecrease, OrderType.MarketIncrease].includes(combination.orderType)
-    //     ) {
-    //       if (combination.isDepositOrWithdraw) {
-    //         sizeDeltaUsdCondition = { sizeDeltaUsd: 0 };
-    //       } else {
-    //         sizeDeltaUsdCondition = { sizeDeltaUsd_not: 0 };
-    //       }
-    //     }
-
-    //     return merge(
-    //       {
-    //         eventName: combination.eventName,
-    //         orderType: combination.orderType,
-    //       },
-    //       sizeDeltaUsdCondition
-    //     );
-    //   }),
-    // },
-    // {
-    // We do not show create liquidation orders in the trade history, thus we filter it out
-    // ... && not (liquidation && orderCreated) === ... && (not liquidation || not orderCreated)
-    // or: [{ orderType_not: OrderType.Liquidation }, { eventName_not: TradeActionType.OrderCreated }],
-    // },
-    // ],
-  });
-
-  const whereClause = `where: ${filtersStr}`;
-
-  const runFuc = useCallback(async () => {
+  const filterFun = useCallback((arr: RawTradeAction[]) => {
     if (!marketsInfo) return;
-    const temp = await fetchHistory(chainId, whereClause);
-    const outArr = temp.map((value) => {
+    const outArr = arr.map((value) => {
       const marketAddress = getAddress(value.marketAddress ?? "");
       const market = getByKey(marketsInfo, marketAddress);
       const indexToken = market?.indexToken;
@@ -118,14 +51,43 @@ const useTradeActions = ({
     });
 
     return outArr;
-  }, [chainId, marketsInfo, whereClause]);
+  }, [marketsInfo])
 
-  const { data } = useSWR(["custom-history"], runFuc, {
-    errorRetryInterval: 5000,
-    refreshInterval: 60000,
-  });
-  return data;
+  const [data, setData] = useState<ReturnType<typeof filterFun>>([])
+
+
+  const runFuc = useCallback(async ({
+    chainId,
+    fromTxTimestamp,
+    toTxTimestamp,
+  }: {
+    chainId: number;
+    fromTxTimestamp: number;
+    toTxTimestamp: number;
+  }) => {
+    if (!marketsInfo) return;
+    setData([])
+    const filtersStr = buildFiltersBody({
+      transaction: {
+        timestamp_gte: fromTxTimestamp,
+        timestamp_lt: toTxTimestamp,
+      },
+    });
+  
+    const whereClause = `where: ${filtersStr}`;
+    const temp = await fetchHistory(chainId, whereClause);
+    const outArr = filterFun(temp)
+    console.log(`converted: ${outArr?.length}`)
+
+    setData(outArr)
+    return outArr
+  }, [filterFun, marketsInfo]);
+
+
+  return {runFuc, data};
 };
+
+
 
 const fetchHistory = async (chainId: number, whereClause: string) => {
   const client = getSyntheticsGraphClient(chainId);
@@ -149,6 +111,7 @@ const fetchHistory = async (chainId: number, whereClause: string) => {
 
     const result = await client!.query({ query, fetchPolicy: "no-cache" });
     const rawData = (result.data.tradeActions ?? []) as any[];
+    console.log({fromPage, toPage, currentMax})
 
     if (rawData.length === 1000) {
       fromPage = toPage;
@@ -168,7 +131,7 @@ const fetchHistory = async (chainId: number, whereClause: string) => {
   const test = [...Array(fromPage).keys(), fromPage].map((page) => {
     
     return async () => {
-const query = gql(`{
+    const query = gql(`{
       tradeActions(
           orderBy: transaction__timestamp,
           orderDirection: desc,
@@ -237,10 +200,22 @@ const query = gql(`{
   for (let i = 0; i < test.length; i += chunkSize) {
     const chunk = test.slice(i, i + chunkSize);
 
-    const tempResult = await Promise.all(chunk.map(fn => fn()))
-
-    console.log(`fetched chunk ${ i + chunk.length } out of ${test.length}`)
-    result.push(...tempResult)
+    let success = false
+    while (!success) {
+      try {
+        console.time(i.toString())
+        const tempResult = await Promise.all(chunk.map(fn => fn()))
+        console.log(`fetched chunk ${ i + chunk.length } out of ${test.length}`)
+        console.timeEnd(i.toString())
+        result.push(...tempResult)
+        success = true
+      } catch (err) {
+        console.log(err)
+        console.log('retry')
+        console.timeEnd(i.toString())
+        await timeout(5000)
+      }
+    }
   }
 
   // const result = await Promise.all(test);
@@ -256,3 +231,7 @@ const query = gql(`{
 export default useTradeActions;
 
 const customFormatUsd = (value?: string | bigint) => formatAmount(BigInt(value ?? ""), USD_DECIMALS, 2, false);
+
+function timeout(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}

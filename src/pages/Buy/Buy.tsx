@@ -10,27 +10,46 @@ import TokenCard from "components/TokenCard/TokenCard";
 import useTradeActions from "domain/useTradeActions";
 import { useChainId } from "lib/chains";
 import { downloadAsCsv } from "lib/csv";
+import { useState } from "react";
 import "./Buy.css";
+
+const months = [1704067200, 1706745600, 1709251200, 1711929600, 1714521600, 1717200000, 1719792000, 1722470400, 1725148800, 1727740800, 1730419200, 1733011200]
 
 export default function BuyGMXGLP() {
   const { chainId } = useChainId();
   const to = 1739157928;
-  const from = 1735689600;
-  // const from = to - 60 * 60;
-  const data = useTradeActions({
-    chainId,
-    fromTxTimestamp: from,
-    toTxTimestamp: to,
-  });
+  const [month, setMonth] = useState<null | number>(null)
+  // const from = 1735689600;
+
+  const {data, runFuc} = useTradeActions();
   return (
     <SEO title={getPageTitle(t`Buy GLP or GMX`)}>
       <div className="BuyGMXGLP page-layout">
         <div className="default-container">
           <div className="BuyGMXGLP-container">
+            <div className="flex gap-3">
+
+            
+          {
+            months.map((m, idx) => {
+
+                return( <button className="border rounded-10 p-5 px-10" key={m} onClick={() => {
+                  setMonth(idx + 1)
+                  runFuc({
+                    chainId,
+                    fromTxTimestamp: m,
+                    toTxTimestamp: months?.[idx + 1] ?? 1735689600
+                  })
+                }}>
+                  {idx  +1}
+                </button>)
+              
+            })
+          }</div>
             {data && (
               <button
                 onClick={() => {
-                  downloadAsCsv(`rawData_${to}`, data, [], undefined, 5);
+                  downloadAsCsv(`rawData_${month}`, data, []);
                 }}
                 className="rounded-12 border px-8 py-4 text-12 text-white"
               >
