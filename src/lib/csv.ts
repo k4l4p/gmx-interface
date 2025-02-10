@@ -29,17 +29,37 @@ export function downloadAsCsv<T>(
   fileName: string,
   data: T[],
   excludedFields: (keyof T)[],
-  customHeaders?: Partial<Record<keyof T, string>>
+  customHeaders?: Partial<Record<keyof T, string>>,
+  splitCount?: number // New optional parameter for splitting
 ) {
   const filteredData = data.map((item) => filterFields(item, excludedFields));
   const csv = convertToCSV(filteredData, customHeaders);
-  const blob = new Blob([csv], { type: "text/csv" });
-  const csvUrl = window.URL.createObjectURL(blob);
-  const aElement = document.createElement("a");
-  aElement.href = csvUrl;
-  aElement.download = `${fileName}.csv`;
-  document.body.appendChild(aElement);
-  aElement.click();
-  document.body.removeChild(aElement);
-  window.URL.revokeObjectURL(csvUrl);
+  
+  // New logic to handle splitting
+  if (splitCount && splitCount > 0) {
+    const chunkSize = Math.ceil(filteredData.length / splitCount);
+    for (let i = 0; i < splitCount; i++) {
+      const chunk = filteredData.slice(i * chunkSize, (i + 1) * chunkSize);
+      const chunkCsv = convertToCSV(chunk, customHeaders);
+      const blob = new Blob([chunkCsv], { type: "text/csv" });
+      const csvUrl = window.URL.createObjectURL(blob);
+      const aElement = document.createElement("a");
+      aElement.href = csvUrl;
+      aElement.download = `${fileName}_part${i + 1}.csv`; // Updated file name for each part
+      document.body.appendChild(aElement);
+      aElement.click();
+      document.body.removeChild(aElement);
+      window.URL.revokeObjectURL(csvUrl);
+    }
+  } else {
+    const blob = new Blob([csv], { type: "text/csv" });
+    const csvUrl = window.URL.createObjectURL(blob);
+    const aElement = document.createElement("a");
+    aElement.href = csvUrl;
+    aElement.download = `${fileName}.csv`;
+    document.body.appendChild(aElement);
+    aElement.click();
+    document.body.removeChild(aElement);
+    window.URL.revokeObjectURL(csvUrl);
+  }
 }

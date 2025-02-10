@@ -166,7 +166,9 @@ const fetchHistory = async (chainId: number, whereClause: string) => {
   }
 
   const test = [...Array(fromPage).keys(), fromPage].map((page) => {
-    const query = gql(`{
+    
+    return async () => {
+const query = gql(`{
       tradeActions(
           orderBy: transaction__timestamp,
           orderDirection: desc,
@@ -219,78 +221,34 @@ const fetchHistory = async (chainId: number, whereClause: string) => {
           }
       }
     }`);
-    return client!.query({ query, fetchPolicy: "no-cache" }).then((r) => ({
-      page,
-      data: (r.data?.tradeActions ?? []) as RawTradeAction[],
-    }));
+      return client!.query({ query, fetchPolicy: "no-cache" }).then((r) => ({
+        page,
+        data: (r.data?.tradeActions ?? []) as RawTradeAction[],
+      }));
+    }
   });
-  const result = await Promise.all(test);
+
+  const result:Array<{
+    page: number;
+    data: RawTradeAction[];
+}> = []
+
+  const chunkSize = 10;
+  for (let i = 0; i < test.length; i += chunkSize) {
+    const chunk = test.slice(i, i + chunkSize);
+
+    const tempResult = await Promise.all(chunk.map(fn => fn()))
+
+    console.log(`fetched chunk ${ i + chunk.length } out of ${test.length}`)
+    result.push(...tempResult)
+  }
+
+  // const result = await Promise.all(test);
 
   const allActions = result
     .sort((a, b) => a.page - b.page)
     .map((r) => r.data)
     .flat();
-  // while (current === 1000) {
-  //   const query = gql(`{
-  //     tradeActions(
-  //         orderBy: transaction__timestamp,
-  //         orderDirection: desc,
-  //         skip: ${page * 1000},
-  //         first: ${1000},
-  //         ${whereClause}
-  //     ) {
-  //         id
-  //         eventName
-
-  //         account
-  //         marketAddress
-  //         swapPath
-  //         initialCollateralTokenAddress
-
-  //         initialCollateralDeltaAmount
-  //         sizeDeltaUsd
-  //         triggerPrice
-  //         acceptablePrice
-  //         executionPrice
-  //         minOutputAmount
-  //         executionAmountOut
-
-  //         priceImpactUsd
-  //         priceImpactDiffUsd
-  //         positionFeeAmount
-  //         borrowingFeeAmount
-  //         fundingFeeAmount
-  //         liquidationFeeAmount
-  //         pnlUsd
-  //         basePnlUsd
-
-  //         collateralTokenPriceMax
-  //         collateralTokenPriceMin
-
-  //         indexTokenPriceMin
-  //         indexTokenPriceMax
-
-  //         orderType
-  //         orderKey
-  //         isLong
-  //         shouldUnwrapNativeToken
-
-  //         reason
-  //         reasonBytes
-
-  //         transaction {
-  //             timestamp
-  //             hash
-  //         }
-  //     }
-  //   }`);
-
-  //   const result = await client!.query({ query, fetchPolicy: "no-cache" });
-  //   const rawTradeActions = (result.data?.tradeActions || []) as RawTradeAction[];
-  //   allActions.push(...rawTradeActions);
-  //   current = rawTradeActions.length;
-  //   page++;
-  // }
 
   return allActions;
 };

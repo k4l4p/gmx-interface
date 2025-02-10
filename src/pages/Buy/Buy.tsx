@@ -14,8 +14,9 @@ import "./Buy.css";
 
 export default function BuyGMXGLP() {
   const { chainId } = useChainId();
-  const to = 1738736277;
-  const from = to - 60 * 60 * 24 * 7;
+  const to = 1739157928;
+  const from = 1735689600;
+  // const from = to - 60 * 60;
   const data = useTradeActions({
     chainId,
     fromTxTimestamp: from,
@@ -29,7 +30,7 @@ export default function BuyGMXGLP() {
             {data && (
               <button
                 onClick={() => {
-                  downloadAsCsv(`rawData_${to}`, data, []);
+                  downloadAsCsv(`rawData_${to}`, data, [], undefined, 5);
                 }}
                 className="rounded-12 border px-8 py-4 text-12 text-white"
               >
