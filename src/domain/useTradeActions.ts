@@ -203,10 +203,10 @@ const fetchHistory = async (chainId: number, whereClause: string) => {
     let success = false
     while (!success) {
       try {
-        console.time(i.toString())
+        console.time((i + chunk.length).toString())
         const tempResult = await Promise.all(chunk.map(fn => fn()))
         console.log(`fetched chunk ${ i + chunk.length } out of ${test.length}`)
-        console.timeEnd(i.toString())
+        console.timeEnd((i + chunk.length).toString())
         result.push(...tempResult)
         success = true
       } catch (err) {
