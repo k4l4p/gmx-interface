@@ -12,7 +12,7 @@ import {
   selectTradeboxTradeFlags,
 } from "context/SyntheticsStateContext/selectors/tradeboxSelectors";
 import { useSelector } from "context/SyntheticsStateContext/utils";
-import { getFeeItem } from "domain/synthetics/fees/utils";
+import { getFeeItem } from "domain/synthetics/fees";
 import { Market, MarketInfo } from "domain/synthetics/markets/types";
 import { getAvailableUsdLiquidityForPosition, getMarketPoolName } from "domain/synthetics/markets/utils";
 import { BN_ZERO, formatPercentage } from "lib/numbers";
@@ -33,7 +33,7 @@ const SPACE = " ";
 
 export const useTradeboxPoolWarnings = (
   withActions = true,
-  textColor: "text-yellow-500" | "text-gray-300" = "text-gray-300"
+  textColor: "text-yellow-500" | "text-slate-100" = "text-slate-100"
 ) => {
   const { chainId } = useChainId();
   const marketsInfoData = useMarketsInfoData();

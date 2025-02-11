@@ -8,11 +8,11 @@ import {
   getMulticallContract,
   getZeroAddressContract,
 } from "config/contracts";
-import { convertTokenAddress } from "config/tokens";
+import { convertTokenAddress } from "sdk/configs/tokens";
 import { SwapPricingType } from "domain/synthetics/orders";
 import { TokenPrices, TokensData, convertToContractPrice, getTokenData } from "domain/synthetics/tokens";
 import { BaseContract, ethers } from "ethers";
-import { extractDataFromError, extractError, getErrorMessage } from "lib/contracts/transactionErrors";
+import { extractDataFromError, getErrorMessage } from "lib/contracts/transactionErrors";
 import { helperToast } from "lib/helperToast";
 import { OrderMetricId } from "lib/metrics/types";
 import { sendOrderSimulatedMetric, sendTxnErrorMetric } from "lib/metrics/utils";
@@ -21,6 +21,9 @@ import { getTenderlyConfig, simulateTxWithTenderly } from "lib/tenderly";
 import { OracleUtils } from "typechain-types/ExchangeRouter";
 import { withRetry } from "viem";
 import { isGlvEnabled } from "../markets/glv";
+import { adjustBlockTimestamp } from "lib/useBlockTimestampRequest";
+import { BlockTimestampData } from "lib/useBlockTimestampRequest";
+import { extractError } from "sdk/utils/contracts";
 
 export type PriceOverrides = {
   [address: string]: TokenPrices | undefined;
@@ -42,6 +45,7 @@ type SimulateExecuteParams = {
   errorTitle?: string;
   swapPricingType?: SwapPricingType;
   metricId?: OrderMetricId;
+  blockTimestampData: BlockTimestampData | undefined;
 };
 
 export async function simulateExecuteTxn(chainId: number, p: SimulateExecuteParams) {
@@ -53,15 +57,23 @@ export async function simulateExecuteTxn(chainId: number, p: SimulateExecutePara
   const exchangeRouter = getExchangeRouterContract(chainId, provider);
   const glvRouter = isGlvEnabled(chainId) ? getGlvRouterContract(chainId, provider) : getZeroAddressContract(provider);
 
-  const result = await multicall.blockAndAggregate.staticCall([
-    { target: multicallAddress, callData: multicall.interface.encodeFunctionData("getCurrentBlockTimestamp") },
-  ]);
+  let blockTimestamp: bigint;
+  let blockTag: string | number;
 
-  const blockNumber = Number(result.blockNumber);
-  const [blockTimestamp] = multicall.interface.decodeFunctionResult(
-    "getCurrentBlockTimestamp",
-    result.returnData[0].returnData
-  );
+  if (p.blockTimestampData) {
+    blockTimestamp = adjustBlockTimestamp(p.blockTimestampData);
+    blockTag = "latest";
+  } else {
+    const result = await multicall.blockAndAggregate.staticCall([
+      { target: multicallAddress, callData: multicall.interface.encodeFunctionData("getCurrentBlockTimestamp") },
+    ]);
+    const returnValues = multicall.interface.decodeFunctionResult(
+      "getCurrentBlockTimestamp",
+      result.returnData[0].returnData
+    );
+    blockTimestamp = returnValues[0];
+    blockTag = Number(result.blockNumber);
+  }
 
   const { primaryTokens, primaryPrices } = getSimulationPrices(chainId, p.tokensData, p.primaryPriceOverrides);
   const priceTimestamp = blockTimestamp + 10n;
@@ -113,7 +125,7 @@ export async function simulateExecuteTxn(chainId: number, p: SimulateExecutePara
     throw new Error(`Unknown method: ${method}`);
   }
 
-  const errorTitle = p.errorTitle || t`Execute order simulation failed.`;
+  let errorTitle = p.errorTitle || t`Execute order simulation failed.`;
 
   const tenderlyConfig = getTenderlyConfig();
   const router = isGlv ? glvRouter : exchangeRouter;
@@ -130,7 +142,7 @@ export async function simulateExecuteTxn(chainId: number, p: SimulateExecutePara
       () => {
         return router.multicall.staticCall(simulationPayloadData, {
           value: p.value,
-          blockTag: blockNumber,
+          blockTag,
           from: p.account,
         });
       },
@@ -175,6 +187,10 @@ export async function simulateExecuteTxn(chainId: number, p: SimulateExecutePara
         acc[k] = parsedError?.args[k].toString();
         return acc;
       }, {});
+
+      if (parsedError?.name === "OrderNotFulfillableAtAcceptablePrice") {
+        errorTitle = t`Prices are now volatile for this market, try again with increased Allowed Slippage value in Advanced Display section.`;
+      }
 
       msg = (
         <div>

@@ -5,19 +5,19 @@ import { ReactNode, useEffect, useMemo, useState } from "react";
 import { BiChevronDown } from "react-icons/bi";
 
 import { getMarketUiConfig } from "config/markets";
-import { getToken } from "config/tokens";
 import { getMarketBadge, MarketsInfoData } from "domain/synthetics/markets";
 import { convertToUsd } from "domain/synthetics/tokens";
 import { MissedCoinsPlace } from "domain/synthetics/userFeedback";
 import type { InfoTokens, Token, TokenInfo } from "domain/tokens";
 import { stripBlacklistedWords } from "domain/tokens/utils";
-import { bigMath } from "lib/bigmath";
-import { expandDecimals, formatAmount } from "lib/numbers";
+import { bigMath } from "sdk/utils/bigmath";
+import { expandDecimals, formatAmount, formatBalanceAmount } from "lib/numbers";
 import { searchBy } from "lib/searchBy";
+import { getToken } from "sdk/configs/tokens";
 
+import { SlideModal } from "components/Modal/SlideModal";
 import SearchInput from "components/SearchInput/SearchInput";
 import TokenIcon from "components/TokenIcon/TokenIcon";
-import Modal from "../Modal/Modal";
 import TooltipWithPortal from "../Tooltip/TooltipWithPortal";
 import { WithMissedCoinsSearch } from "../WithMissedCoinsSearch/WithMissedCoinsSearch";
 
@@ -205,16 +205,16 @@ export default function TokenSelector(props: Props) {
       )}
       onClick={(event) => event.stopPropagation()}
     >
-      <Modal
+      <SlideModal
         qa={qa + "-modal"}
+        className="TokenSelector-modal text-white"
         isVisible={isModalVisible}
         setIsVisible={setIsModalVisible}
         label={props.label}
         footerContent={footerContent}
-        className="text-white"
         headerContent={
           <SearchInput
-            className="mt-15 *:!text-body-medium"
+            className="*:!text-body-medium min-[700px]:mt-15"
             value={searchKeyword}
             setValue={setSearchKeyword}
             onKeyDown={_handleKeyDown}
@@ -282,7 +282,7 @@ export default function TokenSelector(props: Props) {
                 <div className="Token-balance">
                   {(showBalances && balance !== undefined && (
                     <div className="Token-text">
-                      {balance > 0 && formatAmount(balance, token.decimals, 4, true)}
+                      {balance > 0 && formatBalanceAmount(balance, token.decimals)}
                       {balance == 0n && "-"}
                     </div>
                   )) ||
@@ -298,11 +298,11 @@ export default function TokenSelector(props: Props) {
           })}
         </div>
         {sortedFilteredTokens.length === 0 && (
-          <div className="text-16 text-gray-400">
+          <div className="text-16 text-slate-100">
             <Trans>No tokens matched.</Trans>
           </div>
         )}
-      </Modal>
+      </SlideModal>
       <div
         data-qa={qa}
         className="flex cursor-pointer items-center whitespace-nowrap hover:text-blue-300"
